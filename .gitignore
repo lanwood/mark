@@ -1,0 +1,42 @@
+# Logs
+*.log
+nohup.out
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+__pycache__
+*.pyc
+.ipynb_checkpoints/
+run/
+runs/
+
+# Build package
+dist/
+
+# Dependency directories
+node_modules/
+
+# Pycharm Project files
+.idea
+
+# Python cache files
+__pycache__
+build
+*.egg-info
+setup.pye
+
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# VSCode
+.vscode
+.vs

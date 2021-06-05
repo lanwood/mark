@@ -1,6 +1,7 @@
 # Logs
 *.log
-nohup.out
+data/
+*.out
 
 # Runtime data
 pids

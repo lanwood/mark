@@ -7,6 +7,14 @@ import numpy as np
 
 
 class PruningModel(torch.nn.Module):
+    r"""深度学习模型剪枝优化原理：
+    目标： 减少需要拟合的参数个数，从而在特定的数据量下，提高模型表现
+
+    无用的权重大多分布比较平均，或权重数值很小，所以可以使用std检测和percentile来决定训练时是否保留这些权重
+
+    当获取这些无需训练的权重，设置这些参数权重为0，权重更新时，这些值的梯度也设置为0，从而达到该权重不更新的目的
+
+    """
     def prune_by_std(self, s=1e-1):
         pass
 

@@ -1,10 +1,9 @@
-from task_manager import TaskManager as tm
+from .task_manager import TaskManager as tm
 import time
 
 template_config = {
-    'task_list_path': 'task_list.json'
+    'workspace': 'task_history.json'
 }
-
 
 task_config = {
     "type": 1,

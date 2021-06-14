@@ -8,6 +8,8 @@ import requests
 from bs4 import BeautifulSoup
 import re
 
+import MySQLdb
+
 url = "https://fz.lianjia.com/zufang/"
 response = requests.get(url)
 soup = BeautifulSoup(response.text, 'lxml')

@@ -43,3 +43,53 @@ print(price_list)
 if len(price_list) > 0:
     print(price_list[0].text.strip())
 print(title)
+
+
+def get_house_info(house_url):
+    soup = get_page(house_url)
+    price = soup.find('span', class_='total').text
+    house_info = soup.find_all('p')
+    area = house_info[0].text[3:]
+    location = house_info[6].text[3:]
+    info = {
+        '价格': price,
+        '面积': area,
+        '位置': location
+    }
+    return info
+
+
+# 连接数据库
+DATABASE = {
+    'host': '127.0.0.1',
+    'database': 'Examination',
+    'user': 'root',
+    'password': '123456',
+    'charset': 'utf8mb4'
+}
+
+def get_db(setting):
+    return MySQLdb.connect(**setting)
+
+def insert(db, house):
+    values = "'{}'," * 2 + "'{}'"
+    sql_value = values.format(house['价格'], house['面积'], house['位置'])
+    # sql = ("\n"
+    #        "        insert into `house` (`price`, `area`, `location`) values ({}, )\n"
+    #        "    ").format(sql_value)
+    sql = """
+        insert into `house`(`price`, `area`, `location`) values ({})
+    """.format(sql_value)
+    print(sql)
+    cursor = db.cursor()
+    cursor.execute(sql)
+    db.commit()
+
+import time
+db = get_db('')
+links = get_links('')
+for link in links:
+    time.sleep(2)
+    house = get_house_info(link)
+    print(house, end='\r')
+    insert(db, house)

@@ -96,6 +96,8 @@ class TaskManager():
         return self.stop_manager_task(task_id)
 
     def stop(self, task_id=None):
+        if not task_id:
+            return
         return self.stop_manager_task(task_id)
 
     def _running_status(self, manager_id=None):
@@ -141,10 +143,25 @@ class TaskManager():
                 if not task_msg.get('state') in [TaskStatus.RUNNING.name, TaskStatus.IDLE.name]:
                     self.stop_manager_task(manager_id)
 
+                    # 调用回调
+                    if self.callback:
+                        self.callback()
+
+                    # task_list = self.scheduler.get_jobs()
+                    # task_id_list = [task.id for task in task_list]
+                    # if manager_id in task_id_list:
+                    #     print("TaskManager: stop timer ", manager_id)
+                    #     self.scheduler.remove_job(manager_id)
+
         if task_type == TaskType.GENERATE_TEMPLATE.name:
             status_dict.update(task_msg)
             if not task_msg.get('state') in [TaskStatus.RUNNING.name, TaskStatus.IDLE.name]:
-                self.stop_manager_task(manager_id)
+                # self.stop_manager_task(manager_id)
+                task_list = self.scheduler.get_jobs()
+                task_id_list = [task.id for task in task_list]
+                if manager_id in task_id_list:
+                    print("TaskManager: stop timer ", manager_id)
+                    self.scheduler.remove_job(manager_id)
 
         # 更新历史任务列表
         status_dict['update_time'] = time.strftime(
@@ -170,9 +187,9 @@ class TaskManager():
         # 实时更新
         self._dump_history()
 
-        # 调用回调
-        if self.callback:
-            self.callback(self.get_history())
+        # # 调用回调
+        # if self.callback:
+        #     self.callback(self.get_history())
 
     # 更新任务列表文件
     def _dump_history(self):

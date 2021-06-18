@@ -137,6 +137,14 @@ class TaskManager():
                         f = self.pools.apply_async(_create_anomaly_process, [self.target_task, status_dict.get('task_id')])
                         f.get()
                         
+	                if not task_msg.get('state') in [TaskStatus.RUNNING.name, TaskStatus.IDLE.name, TaskStatus.FINISH.name]:
+	                    # self.stop_manager_task(manager_id)
+	                    task_list = self.scheduler.get_jobs()
+	                    task_id_list = [task.id for task in task_list]
+	                    if manager_id in task_id_list:
+	                        print("TaskManager: stop timer ", manager_id)
+	                        self.scheduler.remove_job(manager_id)
+						
             else:
                 status_dict['progress'] = min(
                     50 + (task_msg['progress'] // 2), 100)

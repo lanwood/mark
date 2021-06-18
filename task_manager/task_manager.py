@@ -289,7 +289,8 @@ class TaskManager():
                 # 关闭 task
                 print("TaskManager: stop task ", task_id)
                 self.target_task.get(task_id).close()
-                self.history[task_id]['state'] = TaskStatus.ABORTED.name
+                if self.history[task_id]['state'] == TaskStatus.RUNNING.name:
+                    self.history[task_id]['state'] = TaskStatus.ABORTED.name
                 task_process = True
             else:
                 print("TaskManager: task not found ", task_id)
@@ -302,7 +303,8 @@ class TaskManager():
                     # 关闭 task
                     print("TaskManager: stop task ", ti)
                     self.target_task.get(ti).close()
-                    self.history[ti]['state'] = TaskStatus.ABORTED.name
+                    if self.history[ti]['state'] == TaskStatus.RUNNING.name:
+                        self.history[ti]['state'] = TaskStatus.ABORTED.name
                 task_process = True
 
         print("TaskManager: task process ", task_process)

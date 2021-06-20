@@ -10,9 +10,27 @@ import re
 
 import MySQLdb
 
+HEADERS = {
+    'Accept-Encoding': '',
+    'Accept-Language': '',
+    'Upgrade-Insecure-Requests': '1',
+    'User-Agent': '',
+    'Accept': '',
+    'Referer': '',
+    'Cookie': '',
+    'Connection': ''
+}
+
 url = "https://fz.lianjia.com/zufang/"
-response = requests.get(url)
+response = requests.get(url, headers=HEADERS)
+print(response.status_code)
 soup = BeautifulSoup(response.text, 'lxml')
+
+if soup.has_attr('data-src'):
+    print((soup.attrs['data-src']).split("?")[0])
+else:
+    print((soup.attrs['src']).split("?")[0])
+
 
 links_div = soup.find_all('div', class_="content__list--item")
 links = [div.a.get('href') for div in links_div]
@@ -35,6 +53,7 @@ def get_links(link_url):
 house_url = "https://fz.lianjia.com/apartment/25565.html"
 soup = get_page(house_url)
 title = soup.find('span', class_="brand-title").text.strip()
+# title = soup.find('span', {'class': 'brand-title'}).text.strip()
 # price_list = soup.find_all('span', class_=re.compile("^fr$"))
 # price_list = soup.find_all('span', attrs={'class': re.compile(r"^fr$")})
 price_list = soup.find_all(lambda tag: tag.name == 'span' and tag.get('class') == ['fr'])

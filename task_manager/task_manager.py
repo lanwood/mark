@@ -72,7 +72,7 @@ class TaskManager():
                 self.history = json.load(f)
                 for task_key in self.history.keys():
                     # 检测未完成的任务, 更新状态任务
-                    if self.history.get(task_key).get('param') and self.history.get(task_key).get('state') == TaskStatus.RUNNING.name:
+                    if self.history.get(task_key).get('param') and self.history.get(task_key).get('state') in [TaskStatus.RUNNING.name,  TaskStatus.IDLE.name]:
                         target_update = None
                         if self.history.get(task_key).get('type') == TaskType.FILTER_ANOMALY.name:
                             if self.history.get(task_key).get('progress', 100) <= 50:
@@ -83,6 +83,7 @@ class TaskManager():
                             target_update = TrainServer(self.history.get(task_key).get('param'))
                         if target_update:
                             self.target_task[task_key] = target_update
+                            self.target_task[task_key].start()
                             self.scheduler.add_job(self._running_status, 'interval', seconds=5, args=[task_key], id=task_key)
 
                     # # 检测未完成的任务, 更新状态任务
@@ -114,12 +115,20 @@ class TaskManager():
         status_dict = self.history.get(manager_id)
 
         task_type = status_dict.get('type')
-
+        
+        status_dict.update(task_msg)
         if task_type == TaskType.FILTER_ANOMALY.name:
             if task_msg.get('aiTaskIdList'):
                 status_dict['ai_taskId_list'] = task_msg.get('aiTaskIdList')
                 status_dict['progress'] = min(task_msg['progress'] // 2, 50)
                 if task_msg.get('progress') >= 100 and task_msg.get('state') == TaskStatus.FINISH.name:
+                    # 更新 anomalyDetectList
+                    model_param = task_msg.get('modelParam', [])
+                    anomaly_detect_list = self.anomaly_dict.get('anomalyDetectList', [])
+                    if len(model_param) >= len(anomaly_detect_list):
+                        for index, anomaly_detect in enumerate(anomaly_detect_list):
+                            anomaly_detect['scoreMapThre'] = model_param[index].get('scoreMapThre')
+
                     # # 开始异常检测
                     if self.start_mode == SubTaskMode.MAIN.value:
                         self._create_anomaly(self.anomaly_dict.get('anomalyDetectList'), status_dict.get('task_id'))
@@ -137,18 +146,18 @@ class TaskManager():
                         f = self.pools.apply_async(_create_anomaly_process, [self.target_task, status_dict.get('task_id')])
                         f.get()
                         
-	                if not task_msg.get('state') in [TaskStatus.RUNNING.name, TaskStatus.IDLE.name, TaskStatus.FINISH.name]:
-	                    # self.stop_manager_task(manager_id)
-	                    task_list = self.scheduler.get_jobs()
-	                    task_id_list = [task.id for task in task_list]
-	                    if manager_id in task_id_list:
-	                        print("TaskManager: stop timer ", manager_id)
-	                        self.scheduler.remove_job(manager_id)
-						
+                if not task_msg.get('state') in [TaskStatus.RUNNING.name, TaskStatus.FINISH.name]:
+                    # self.stop_manager_task(manager_id)
+                    task_list = self.scheduler.get_jobs()
+                    task_id_list = [task.id for task in task_list]
+                    if manager_id in task_id_list:
+                        print("TaskManager: stop timer ", manager_id)
+                        self.scheduler.remove_job(manager_id)
+                        
             else:
                 status_dict['progress'] = min(
                     50 + (task_msg['progress'] // 2), 100)
-                if not task_msg.get('state') in [TaskStatus.RUNNING.name, TaskStatus.IDLE.name]:
+                if not task_msg.get('state') in [TaskStatus.RUNNING.name]:
                     self.stop_manager_task(manager_id)
 
                     # 调用回调
@@ -162,8 +171,7 @@ class TaskManager():
                     #     self.scheduler.remove_job(manager_id)
 
         if task_type == TaskType.GENERATE_TEMPLATE.name:
-            status_dict.update(task_msg)
-            if not task_msg.get('state') in [TaskStatus.RUNNING.name, TaskStatus.IDLE.name]:
+            if not task_msg.get('state') in [TaskStatus.RUNNING.name]:
                 # self.stop_manager_task(manager_id)
                 task_list = self.scheduler.get_jobs()
                 task_id_list = [task.id for task in task_list]
@@ -195,7 +203,7 @@ class TaskManager():
         # 实时更新
         self._dump_history()
 
-        # # 调用回调
+        # # 调用回调, 更新UI状态列表
         # if self.callback:
         #     self.callback(self.get_history())
 
@@ -297,7 +305,7 @@ class TaskManager():
                 # 关闭 task
                 print("TaskManager: stop task ", task_id)
                 self.target_task.get(task_id).close()
-                if self.history[task_id]['state'] == TaskStatus.RUNNING.name:
+                if self.history[task_id]['state'] in [TaskStatus.RUNNING.name, TaskStatus.IDLE.name]:
                     self.history[task_id]['state'] = TaskStatus.ABORTED.name
                 task_process = True
             else:
@@ -311,7 +319,7 @@ class TaskManager():
                     # 关闭 task
                     print("TaskManager: stop task ", ti)
                     self.target_task.get(ti).close()
-                    if self.history[ti]['state'] == TaskStatus.RUNNING.name:
+                    if self.history[ti]['state'] in [TaskStatus.RUNNING.name, TaskStatus.IDLE.name]:
                         self.history[ti]['state'] = TaskStatus.ABORTED.name
                 task_process = True
 

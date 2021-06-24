@@ -67,30 +67,35 @@ class TaskManager():
 
     def start(self):
         if self.status_path and os.path.exists(self.status_path):
-            print(self.status_path)
             with open(self.status_path, 'r') as f:
                 self.history = json.load(f)
-                for task_key in self.history.keys():
-                    # 检测未完成的任务, 更新状态任务
-                    if self.history.get(task_key).get('param') and self.history.get(task_key).get('state') in [TaskStatus.RUNNING.name,  TaskStatus.IDLE.name]:
+
+                # 检测未完成的任务, 重启任务
+                running_history = [t for (k, t) in self.history.items() if t.get('state') in [TaskStatus.RUNNING.name,  TaskStatus.IDLE.name]]
+
+                # 多个未完成任务，只启动最后的任务
+                if len(running_history) > 0:
+                    running_history = running_history[-1:]
+
+                for retask in running_history:
+                    task_key = retask.get('task_id')
+                    if retask.get('param') and task_key:
                         target_update = None
-                        if self.history.get(task_key).get('type') == TaskType.FILTER_ANOMALY.name:
-                            if self.history.get(task_key).get('progress', 100) <= 50:
-                                target_update = TrainServer(self.history.get(task_key).get('param'))
+                        if retask.get('type') == TaskType.FILTER_ANOMALY.name:
+                            if retask.get('progress', 100) < 50:
+                                target_update = TrainServer(retask.get('param', {}))
                             else:
-                                target_update = AnomalyServer(self.history.get(task_key).get('param').get('anomalyDetectList'), task_key)
-                        if self.history.get(task_key).get('type') == TaskType.GENERATE_TEMPLATE.name:
-                            target_update = TrainServer(self.history.get(task_key).get('param'))
+                                retask['progress'] = 50
+                                target_update = AnomalyServer(retask.get('param', {}).get('anomalyDetectList', []), task_key)
+                        elif retask.get('type') == TaskType.GENERATE_TEMPLATE.name:
+                            target_update = TrainServer(retask.get('param'), {})
                         if target_update:
                             self.target_task[task_key] = target_update
                             self.target_task[task_key].start()
+                            print("TaskManager: restart task ", task_key, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), retask['progress'], retask.get('type'))
                             self.scheduler.add_job(self._running_status, 'interval', seconds=5, args=[task_key], id=task_key)
-
-                    # # 检测未完成的任务, 更新状态任务
-                    # if self.history.get(task_key).get('param') and self.history.get(task_key).get('state') == TaskStatus.RUNNING.name:
-                    #     print("TaskManager: history update task_id:", task_key)
-                    #     self.history[task_key]['state'] = TaskStatus.ABORTED.name
-                    #     self._dump_history()
+                            self.history.get(task_key, {})['update_time'] = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+                            self._dump_history()
 
 
     def close(self, task_id=None):
@@ -104,8 +109,7 @@ class TaskManager():
     def _running_status(self, manager_id=None):
         if not manager_id:
             return
-        print("TaskManager: status monitor ", time.strftime(
-            "%Y-%m-%d %H:%M:%S", time.localtime()))
+        print("TaskManager: status monitor ", time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()), manager_id)
         task_msg = self.target_task.get(manager_id).get_status()
         print("TaskManager: receive ", task_msg)
 
@@ -115,16 +119,29 @@ class TaskManager():
         status_dict = self.history.get(manager_id)
 
         task_type = status_dict.get('type')
-        
+
+        # 返回的进度小于历史任务进度时，不更新任务进度
+        if task_msg.get('state') in [TaskStatus.RUNNING.name, TaskStatus.IDLE.name] \
+            and ((task_type == TaskType.FILTER_ANOMALY.name and task_msg.get('aiTaskIdList') and min(task_msg['progress'] // 2, 50) <= status_dict['progress'])
+            or (task_type == TaskType.GENERATE_TEMPLATE.name and task_msg['progress'] <= status_dict['progress'])
+            or (task_type == TaskType.FILTER_ANOMALY.name and not task_msg.get('aiTaskIdList') and min(50 + (task_msg['progress'] // 2), 100) <= status_dict['progress'])):
+            record_ts = time.mktime(time.strptime(status_dict.get('update_time'),'%Y-%m-%d %H:%M:%S'))
+            current_ts = int(time.time())
+            overtime = current_ts - record_ts
+            print("TaskManager: Status not updated ", manager_id, status_dict.get('update_time'), "+", overtime, "s;", "record progress: ", status_dict['progress'])
+            if overtime > 300: # 超出5min进度未更新, 停止任务
+                print("TaskManager: Task Overtime")
+                self.stop(manager_id)
+            return
+  
         status_dict.update(task_msg)
         if task_type == TaskType.FILTER_ANOMALY.name:
             if task_msg.get('aiTaskIdList'):
-                status_dict['ai_taskId_list'] = task_msg.get('aiTaskIdList')
                 status_dict['progress'] = min(task_msg['progress'] // 2, 50)
                 if task_msg.get('progress') >= 100 and task_msg.get('state') == TaskStatus.FINISH.name:
                     # 更新 anomalyDetectList
                     model_param = task_msg.get('modelParam', [])
-                    anomaly_detect_list = self.anomaly_dict.get('anomalyDetectList', [])
+                    anomaly_detect_list = status_dict.get('param', {}).get('anomalyDetectList', [])
                     if len(model_param) >= len(anomaly_detect_list):
                         for index, anomaly_detect in enumerate(anomaly_detect_list):
                             anomaly_detect['scoreMapThre'] = model_param[index].get('scoreMapThre')
@@ -216,13 +233,14 @@ class TaskManager():
     def _create_anomaly(self, detect_dict, manager_id):
         self.target_task[manager_id] = AnomalyServer(detect_dict, manager_id)
         self.target_task[manager_id].start()
+        print("TaskManager: start task ", manager_id, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
 
     def _create_template(self, train_dict):
 
         manager_id = train_dict.get('managerId')
         if self.history.get(manager_id):
             train_dict['taskIdList'] = self.history[manager_id].get(
-                'taskIdList', ["", ""])
+                'aiTaskIdList', ["", ""])
         else:
             train_dict['taskIdList'] = ["", ""]
             self.history[train_dict.get('managerId')] = {
@@ -234,6 +252,7 @@ class TaskManager():
 
         self.target_task[manager_id] = TrainServer(train_dict)
         self.target_task[manager_id].start()
+        print("TaskManager: start task ", manager_id, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime()))
 
 
     def _task_process(self, param_dict, task_type, task_id, is_stage_two=False):
@@ -246,7 +265,7 @@ class TaskManager():
         param_dict.update({"managerId": manager_id})
 
         if is_stage_two:
-            print("TaskManager: Stage Two")
+            print("TaskManager: Stage Two", manager_id)
             self.history[manager_id] = {
                 "progress": 50,
                 "state": TaskStatus.RUNNING.name,
@@ -255,7 +274,7 @@ class TaskManager():
             }
             self._create_anomaly(param_dict.get('anomalyDetectList'), manager_id)
         else:
-            print("TaskManager: Stage One")
+            print("TaskManager: Stage One", manager_id)
             self._create_template(param_dict)
 
         self.history[manager_id].update({
@@ -269,7 +288,7 @@ class TaskManager():
 
     # 筛选异常
     def create_anomaly_task(self, detect_dict, task_id=None):
-        print("TaskManager: create anomaly task")
+        print("TaskManager: create anomaly detection task ", detect_dict, task_id)
         self.anomaly_dict.update(detect_dict)
 
         # if weights file exists, start stage Two
@@ -285,7 +304,7 @@ class TaskManager():
 
     # 生成模板
     def create_generate_template_task(self, train_dict, task_id=None):
-        print("TaskManager: create generate template task")
+        print("TaskManager: create generate template task ", train_dict, task_id)
         self.template_dict.update(train_dict)
         return self._task_process(self.template_dict, TaskType.GENERATE_TEMPLATE.name, task_id)
 
@@ -329,15 +348,12 @@ class TaskManager():
 
     # 获取任务状态
     def get_status(self, task_id):
-        # print("labelImg: get status")
         return self.history.get(task_id)
 
     # 获取历史任务状态
     def get_history(self):
-        # print("labelImg: get history")
         return list(self.history.values())
 
     # 设置config
     def set_config(self, config):
-        # print("labelImg: set config")
         self.config = config

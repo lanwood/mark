@@ -349,7 +349,7 @@ kill -9 $pid
 screen -wipe
 ```
 
-11、常用指令
+11、linux 常用指令
 ```shell
 # gpu 状态查询
 nvidia-smi | grep 'MiB' | grep 'Default' | awk '{print $9, $11, $13}'

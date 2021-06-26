@@ -349,9 +349,18 @@ kill -9 $pid
 screen -wipe
 ```
 
+11、常用指令
+```shell
+# gpu 状态查询
+nvidia-smi | grep 'MiB' | grep 'Default' | awk '{print $9, $11, $13}'
+
+# 查询gpu使用情况
+nvidia-smi | grep 'MiB' | grep -v 'Default' | awk '{print $2, $3, $5}'
+
+```
 
 
-11、 线上标注工具
+12、 线上标注工具
 
 ```shell
 docker pull dorowu/ubuntu-desktop-lxde-vnc

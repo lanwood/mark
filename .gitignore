@@ -1,5 +1,7 @@
+# https://www.toptal.com/developers/gitignore  |  http://www.gitignore.io/
 # Logs
 *.log
+log*
 data/
 *.out
 
@@ -41,3 +43,7 @@ venv.bak/
 # VSCode
 .vscode
 .vs
+
+# model
+*.ptmodel
+*.h5

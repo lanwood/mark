@@ -181,6 +181,14 @@ custom_channels:
   simpleitk: https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud
 ```
 
+```shell
+
+https://tensorflow.google.cn/install/source#linux
+
+https://download.pytorch.org/whl/torch_stable.html
+
+```
+
 
 
 5、安装数据库
